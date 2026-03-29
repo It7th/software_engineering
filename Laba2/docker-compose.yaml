@@ -1,0 +1,30 @@
+services:
+  lms-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lms-api
+    environment:
+      PORT: 8080
+      DB_PATH: /app/data/lms.db
+    ports:
+      - "8080:8080"
+    volumes:
+      - lms-api-data:/app/data
+    restart: unless-stopped
+
+  swagger-ui:
+    image: swaggerapi/swagger-ui:v5.17.14
+    container_name: lms-api-swagger
+    environment:
+      SWAGGER_JSON: /docs/openapi.yaml
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./openapi.yaml:/docs/openapi.yaml:ro
+    depends_on:
+      - lms-api
+    restart: unless-stopped
+
+volumes:
+  lms-api-data:
