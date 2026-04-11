@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lms-postgres
+    environment:
+      POSTGRES_DB: lms_db
+      POSTGRES_USER: lms
+      POSTGRES_PASSWORD: lms
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./data.sql:/docker-entrypoint-initdb.d/02-data.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lms -d lms_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  lms-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lms-api
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgresql://lms:lms@postgres:5432/lms_db
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  swagger-ui:
+    image: swaggerapi/swagger-ui:v5.17.14
+    container_name: lms-api-swagger
+    environment:
+      SWAGGER_JSON: /docs/openapi.yaml
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./openapi.yaml:/docs/openapi.yaml:ro
+    depends_on:
+      - lms-api
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

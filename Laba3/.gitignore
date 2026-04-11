@@ -1,0 +1,4 @@
+build/
+build-docker/
+bin/
+.DS_Store

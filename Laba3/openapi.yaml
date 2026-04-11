@@ -1,0 +1,607 @@
+openapi: 3.0.3
+info:
+  title: Mini LMS API
+  version: 2.0.0
+  description: |
+    Учебный REST API для варианта 19 на PostgreSQL.
+    Основные сущности: пользователь, курс, урок.
+    Для авторизации используется Bearer token, который сервис выдаёт после логина.
+servers:
+  - url: http://localhost:8080
+tags:
+  - { name: Service }
+  - { name: Auth }
+  - { name: Users }
+  - { name: Courses }
+  - { name: Progress }
+
+paths:
+  /health:
+    get:
+      tags: [Service]
+      summary: Проверка доступности сервиса
+      responses:
+        '200':
+          description: Сервер отвечает
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service, timestamp]
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: learning-management-api }
+                  timestamp: { type: string, format: date-time }
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Регистрация студента
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+            example:
+              login: student01
+              firstName: Ivan
+              lastName: Petrov
+              email: student01@example.com
+              password: secret123
+      responses:
+        '201':
+          description: Пользователь создан
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { $ref: '#/components/responses/ConflictError' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Логин и получение токена
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+            example:
+              login: instructor
+              password: instructor123
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+
+  /users:
+    post:
+      tags: [Users]
+      summary: Создание пользователя администратором
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminCreateUserRequest' }
+            example:
+              login: teacher02
+              firstName: Olga
+              lastName: Smirnova
+              email: teacher02@example.com
+              password: pass123
+              role: INSTRUCTOR
+              status: ACTIVE
+      responses:
+        '201':
+          description: Пользователь создан
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+        '409': { $ref: '#/components/responses/ConflictError' }
+
+  /users/by-login:
+    get:
+      tags: [Users]
+      summary: Поиск пользователя по логину
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: login
+          in: query
+          required: true
+          schema: { type: string }
+          example: student01
+      responses:
+        '200':
+          description: Пользователь найден
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+
+  /users/search:
+    get:
+      tags: [Users]
+      summary: Поиск по маске имени и фамилии
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: firstNameMask
+          in: query
+          required: false
+          schema: { type: string }
+          example: iv
+        - name: lastNameMask
+          in: query
+          required: false
+          schema: { type: string }
+          example: pe
+      responses:
+        '200':
+          description: Список пользователей
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserListResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+
+  /users/{userId}/courses:
+    get:
+      tags: [Progress]
+      summary: Получение курсов пользователя
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Курсы пользователя
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserCoursesResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+
+  /users/{userId}/lessons/{lessonId}/completion:
+    post:
+      tags: [Progress]
+      summary: Отметить урок как пройденный
+      description: Повторный вызов разрешён. Если запись уже есть, сервис вернёт `200 OK`.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/LessonId'
+      responses:
+        '201':
+          description: Прохождение сохранено
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompletionResponse' }
+        '200':
+          description: Урок уже был отмечен раньше
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompletionResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+        '409':
+          description: Пользователь не записан на курс урока
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /courses:
+    get:
+      tags: [Courses]
+      summary: Каталог курсов
+      description: По умолчанию возвращаются только опубликованные курсы. `includeAll=true` доступен только для `ADMIN` и `INSTRUCTOR`.
+      parameters:
+        - name: includeAll
+          in: query
+          required: false
+          schema: { type: boolean }
+          example: false
+      responses:
+        '200':
+          description: Список курсов
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseListResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+    post:
+      tags: [Courses]
+      summary: Создать курс
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseCreateRequest' }
+            example:
+              title: HTTP Basics
+              description: Вводный курс по REST и HTTP.
+              status: DRAFT
+      responses:
+        '201':
+          description: Курс создан
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+
+  /courses/{courseId}:
+    patch:
+      tags: [Courses]
+      summary: Частичное обновление курса
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CourseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CoursePatchRequest' }
+            example:
+              status: PUBLISHED
+      responses:
+        '200':
+          description: Курс обновлён
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+
+  /courses/{courseId}/lessons:
+    get:
+      tags: [Courses]
+      summary: Получение уроков курса
+      description: Для неопубликованных курсов список доступен только автору или администратору.
+      parameters:
+        - $ref: '#/components/parameters/CourseId'
+      responses:
+        '200':
+          description: Уроки курса
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LessonListResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+    post:
+      tags: [Courses]
+      summary: Добавление урока
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CourseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LessonCreateRequest' }
+            example:
+              title: GET и POST
+              description: Разница между чтением и изменением данных.
+              position: 1
+      responses:
+        '201':
+          description: Урок создан
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LessonResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+        '409': { $ref: '#/components/responses/ConflictError' }
+
+  /courses/{courseId}/enrollments:
+    post:
+      tags: [Progress]
+      summary: Записаться на курс
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CourseId'
+      responses:
+        '201':
+          description: Запись создана
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrollmentResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+        '409': { $ref: '#/components/responses/ConflictError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: SessionToken
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: integer, format: int32 }
+    CourseId:
+      name: courseId
+      in: path
+      required: true
+      schema: { type: integer, format: int32 }
+    LessonId:
+      name: lessonId
+      in: path
+      required: true
+      schema: { type: integer, format: int32 }
+
+  responses:
+    ValidationError:
+      description: Ошибка в параметрах запроса или теле
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    UnauthorizedError:
+      description: Нет токена или токен невалиден
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ForbiddenError:
+      description: У пользователя недостаточно прав
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFoundError:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ConflictError:
+      description: Конфликт состояния
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, example: already_enrolled }
+        message: { type: string, example: Student is already enrolled in the selected course }
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { $ref: '#/components/schemas/Error' }
+
+    User:
+      type: object
+      required: [id, login, firstName, lastName, email, role, status, createdAt]
+      properties:
+        id: { type: integer, format: int32, example: 3 }
+        login: { type: string, example: student01 }
+        firstName: { type: string, example: Ivan }
+        lastName: { type: string, example: Petrov }
+        email: { type: string, format: email, example: student01@example.com }
+        role:
+          type: string
+          enum: [ADMIN, INSTRUCTOR, STUDENT]
+        status:
+          type: string
+          enum: [ACTIVE, BLOCKED]
+        createdAt: { type: string, format: date-time }
+
+    UserResponse:
+      type: object
+      required: [user]
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+
+    RegisterRequest:
+      type: object
+      required: [login, firstName, lastName, email, password]
+      properties:
+        login: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string, format: email }
+        password: { type: string }
+
+    AdminCreateUserRequest:
+      allOf:
+        - $ref: '#/components/schemas/RegisterRequest'
+        - type: object
+          properties:
+            role:
+              type: string
+              enum: [ADMIN, INSTRUCTOR, STUDENT]
+            status:
+              type: string
+              enum: [ACTIVE, BLOCKED]
+
+    LoginRequest:
+      type: object
+      required: [login, password]
+      properties:
+        login: { type: string }
+        password: { type: string }
+
+    LoginResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token: { type: string, example: 73cfc456-4dfb-4ae3-9701-8f341be07d4c }
+        user: { $ref: '#/components/schemas/User' }
+
+    UserListResponse:
+      type: object
+      required: [count, items]
+      properties:
+        count: { type: integer, example: 1 }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/User' }
+
+    Course:
+      type: object
+      required: [id, title, description, authorId, status, createdAt]
+      properties:
+        id: { type: integer, example: 7 }
+        title: { type: string, example: HTTP Basics }
+        description: { type: string, example: Вводный курс по REST и HTTP. }
+        authorId: { type: integer, example: 2 }
+        status:
+          type: string
+          enum: [DRAFT, PUBLISHED, ARCHIVED]
+        createdAt: { type: string, format: date-time }
+
+    CourseResponse:
+      type: object
+      required: [course]
+      properties:
+        course: { $ref: '#/components/schemas/Course' }
+
+    CourseCreateRequest:
+      type: object
+      required: [title, description]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        status:
+          type: string
+          enum: [DRAFT, PUBLISHED, ARCHIVED]
+          default: DRAFT
+
+    CoursePatchRequest:
+      type: object
+      properties:
+        title: { type: string }
+        description: { type: string }
+        status:
+          type: string
+          enum: [DRAFT, PUBLISHED, ARCHIVED]
+
+    CourseListResponse:
+      type: object
+      required: [count, items]
+      properties:
+        count: { type: integer, example: 1 }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Course' }
+
+    Lesson:
+      type: object
+      required: [id, courseId, title, description, position, createdAt]
+      properties:
+        id: { type: integer, example: 11 }
+        courseId: { type: integer, example: 7 }
+        title: { type: string, example: GET и POST }
+        description: { type: string, example: Разница между чтением и изменением данных. }
+        position: { type: integer, example: 1 }
+        createdAt: { type: string, format: date-time }
+
+    LessonResponse:
+      type: object
+      required: [lesson]
+      properties:
+        lesson: { $ref: '#/components/schemas/Lesson' }
+
+    LessonCreateRequest:
+      type: object
+      required: [title, description, position]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        position: { type: integer }
+
+    LessonListResponse:
+      type: object
+      required: [course, count, items]
+      properties:
+        course: { $ref: '#/components/schemas/Course' }
+        count: { type: integer, example: 2 }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Lesson' }
+
+    Enrollment:
+      type: object
+      required: [id, userId, courseId, status, enrolledAt]
+      properties:
+        id: { type: integer, example: 9 }
+        userId: { type: integer, example: 3 }
+        courseId: { type: integer, example: 7 }
+        status:
+          type: string
+          enum: [ACTIVE, COMPLETED, CANCELLED]
+        enrolledAt: { type: string, format: date-time }
+
+    EnrollmentResponse:
+      type: object
+      required: [enrollment]
+      properties:
+        enrollment: { $ref: '#/components/schemas/Enrollment' }
+
+    UserCourse:
+      type: object
+      required: [enrollmentId, courseId, title, description, courseStatus, enrollmentStatus, enrolledAt]
+      properties:
+        enrollmentId: { type: integer, example: 9 }
+        courseId: { type: integer, example: 7 }
+        title: { type: string, example: HTTP Basics }
+        description: { type: string, example: Вводный курс по REST и HTTP. }
+        courseStatus:
+          type: string
+          enum: [DRAFT, PUBLISHED, ARCHIVED]
+        enrollmentStatus:
+          type: string
+          enum: [ACTIVE, COMPLETED, CANCELLED]
+        enrolledAt: { type: string, format: date-time }
+
+    UserCoursesResponse:
+      type: object
+      required: [count, items]
+      properties:
+        count: { type: integer, example: 1 }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/UserCourse' }
+
+    Completion:
+      type: object
+      required: [userId, lessonId, completedAt, alreadyCompleted, enrollmentStatus]
+      properties:
+        userId: { type: integer, example: 3 }
+        lessonId: { type: integer, example: 11 }
+        completedAt: { type: string, format: date-time }
+        alreadyCompleted: { type: boolean, example: false }
+        enrollmentStatus:
+          type: string
+          enum: [ACTIVE, COMPLETED, CANCELLED]
+
+    CompletionResponse:
+      type: object
+      required: [completion]
+      properties:
+        completion: { $ref: '#/components/schemas/Completion' }
