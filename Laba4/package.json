@@ -1,0 +1,16 @@
+{
+  "name": "lms-mongodb-lab",
+  "version": "1.0.0",
+  "description": "Homework 04: LMS API backed by MongoDB",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "seed": "mongosh \"$MONGO_URL\" data.js",
+    "validate-schema": "mongosh \"$MONGO_URL\" validation.js"
+  },
+  "dependencies": {
+    "express": "^4.18.3",
+    "mongodb": "^6.5.0"
+  }
+}
