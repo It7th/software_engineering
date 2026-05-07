@@ -1,0 +1,17 @@
+{
+  "name": "lms-performance-lab",
+  "version": "1.0.0",
+  "description": "Homework 05: LMS API with caching and rate limiting",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "seed": "mongosh \"$MONGO_URL\" data.js",
+    "validate-schema": "mongosh \"$MONGO_URL\" validation.js"
+  },
+  "dependencies": {
+    "express": "^4.18.3",
+    "mongodb": "^6.5.0",
+    "redis": "^4.6.13"
+  }
+}

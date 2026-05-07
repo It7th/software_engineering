@@ -1,0 +1,59 @@
+services:
+  mongo:
+    image: mongo:7.0
+    container_name: lms-lab5-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+      - ./validation.js:/docker-entrypoint-initdb.d/01-validation.js:ro
+      - ./data.js:/docker-entrypoint-initdb.d/02-data.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: lms-lab5-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  lms-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lms-lab5-api
+    environment:
+      PORT: 8080
+      MONGO_URL: mongodb://mongo:27017/lms_mongo
+      REDIS_URL: redis://redis:6379
+      COURSES_CACHE_TTL_SECONDS: 60
+      LESSONS_CACHE_TTL_SECONDS: 120
+      USER_COURSES_CACHE_TTL_SECONDS: 45
+      USER_CACHE_TTL_SECONDS: 300
+      COMPLETION_RATE_LIMIT: 20
+      COMPLETION_RATE_WINDOW_MS: 60000
+    ports:
+      - "8080:8080"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
+  redis-data:
