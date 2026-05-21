@@ -1,0 +1,42 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: lms-lab6-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: lms
+      RABBITMQ_DEFAULT_PASS: lms
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  consumer:
+    build: .
+    command: ["./consumer"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 15672
+      RABBITMQ_USER: lms
+      RABBITMQ_PASSWORD: lms
+      READ_MODEL_PATH: /app/data/read_model.json
+    volumes:
+      - ./data:/app/data
+
+  producer:
+    build: .
+    command: ["./producer"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 15672
+      RABBITMQ_USER: lms
+      RABBITMQ_PASSWORD: lms
