@@ -1,6 +1,6 @@
 #pragma once
 
-#include "http_client.hpp"
+#include <rabbitmq-c/amqp.h>
 
 #include <optional>
 #include <string>
@@ -8,6 +8,7 @@
 class RabbitMqClient {
 public:
   RabbitMqClient(std::string host, int port, std::string user, std::string password);
+  ~RabbitMqClient();
 
   void waitUntilReady() const;
   void declareTopology() const;
@@ -15,7 +16,14 @@ public:
   std::optional<std::string> getOne() const;
 
 private:
-  HttpClient http_;
+  std::string host_;
+  int port_;
+  std::string user_;
+  std::string password_;
+  mutable amqp_connection_state_t connection_ = nullptr;
+  mutable bool connected_ = false;
 
-  void expectOk(const HttpResponse& response, const std::string& action) const;
+  void connect() const;
+  void close() const;
+  void requireConnected() const;
 };

@@ -1,19 +1,14 @@
 # Домашнее задание 06: Event-Driven архитектура для LMS
 
-Вариант 19: система управления обучением, похожая по домену на Moodle.
-
-В этой работе я вынес основные изменения LMS в события. Команды меняют write model, после этого сервис публикует событие в RabbitMQ. Consumer читает события и собирает простую read model для экранов каталога, курсов пользователя и прогресса.
 
 ## Что внутри
 
 - `event_driven_design.md` - описание архитектуры, команд, событий, брокера и CQRS.
 - `event_catalog.md` - каталог событий.
-- `src/producer.cpp` - публикует тестовый сценарий LMS.
+- `src/producer.cpp` - POCO HTTP API, который публикует события.
 - `src/consumer.cpp` - читает события и обновляет `data/read_model.json`.
 - `docker-compose.yml` - RabbitMQ, producer и consumer.
-- `Dockerfile`, `Makefile` - сборка C++ кода.
-
-Код написан на C++17. Для учебного стенда producer и consumer ходят в RabbitMQ через Management HTTP API. Это позволяет собрать пример без сторонних C++ библиотек. В самой архитектуре целевой вариант такой же: durable topic exchange, routing keys и отдельные очереди потребителей.
+- `Dockerfile`, `Makefile`, `CMakeLists.txt` - сборка C++ кода.
 
 ## Запуск
 
@@ -25,17 +20,12 @@ docker compose up --build
 После запуска:
 
 - RabbitMQ UI: `http://localhost:15672`
+- HTTP API: `http://localhost:8096`
 - логин: `lms`
 - пароль: `lms`
 - read model: `data/read_model.json`
 
-`producer` публикует события и завершается. `consumer` остается работать и ждет новые сообщения.
-
-Если нужно отправить события еще раз:
-
-```bash
-docker compose run --rm producer
-```
+`producer` теперь работает как HTTP-сервис. События публикуются после POST-команд.
 
 Посмотреть read model:
 
@@ -45,25 +35,32 @@ cat data/read_model.json
 
 ## Локальная сборка
 
-Если RabbitMQ уже поднят, можно собрать C++ код локально:
+Если RabbitMQ уже поднят, можно собрать C++ код локально. Нужны `POCO` и `rabbitmq-c`.
 
 ```bash
 make
 ```
 
+Через CMake:
+
+```bash
+cmake -S . -B build
+cmake --build build
+```
+
 Запуск consumer:
 
 ```bash
-RABBITMQ_HOST=127.0.0.1 RABBITMQ_PORT=15672 RABBITMQ_USER=lms RABBITMQ_PASSWORD=lms ./bin/consumer
+RABBITMQ_HOST=127.0.0.1 RABBITMQ_PORT=5672 RABBITMQ_USER=lms RABBITMQ_PASSWORD=lms ./bin/consumer
 ```
 
 Запуск producer:
 
 ```bash
-RABBITMQ_HOST=127.0.0.1 RABBITMQ_PORT=15672 RABBITMQ_USER=lms RABBITMQ_PASSWORD=lms ./bin/producer
+RABBITMQ_HOST=127.0.0.1 RABBITMQ_PORT=5672 RABBITMQ_USER=lms RABBITMQ_PASSWORD=lms HTTP_PORT=8080 ./bin/producer
 ```
 
-## Какие события публикуются в демо
+## Какие события публикуются
 
 - `UserCreated`
 - `CourseCreated`
@@ -81,13 +78,61 @@ Routing keys:
 
 Все события попадают в exchange `lms.events`. Очередь `lms.projections` подписана на `#`, поэтому consumer видит весь поток и строит read model.
 
-## Что проверить
+## Пример проверки
 
-После `docker compose up --build` в логах producer должны быть строки вида:
+Создать пользователя:
+
+```bash
+curl -sS -X POST http://localhost:8096/users \
+  -H 'Content-Type: application/json' \
+  -d '{"login":"student01","firstName":"Ivan","lastName":"Petrov","email":"student01@example.com"}'
+```
+
+Найти пользователя по login:
+
+```bash
+curl -sS 'http://localhost:8096/users/by-login?login=student01'
+```
+
+Создать курс:
+
+```bash
+curl -sS -X POST http://localhost:8096/courses \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Event Driven LMS","description":"Events and CQRS","authorId":"user-900","status":"PUBLISHED"}'
+```
+
+Добавить уроки:
+
+```bash
+curl -sS -X POST http://localhost:8096/courses/course-200/lessons \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Domain events","position":1,"status":"PUBLISHED"}'
+
+curl -sS -X POST http://localhost:8096/courses/course-200/lessons \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Read model projections","position":2,"status":"PUBLISHED"}'
+```
+
+Записать пользователя на курс:
+
+```bash
+curl -sS -X POST http://localhost:8096/courses/course-200/enrollments \
+  -H 'Content-Type: application/json' \
+  -d '{"userId":"user-100"}'
+```
+
+Отметить урок пройденным:
+
+```bash
+curl -sS -X POST http://localhost:8096/users/user-100/lessons/lesson-300/completion
+```
+
+В логах producer должны быть строки вида:
 
 ```text
-published UserCreated by identity.user.created routed=true
-published CourseCreated by catalog.course.created routed=true
+published UserCreated by identity.user.created
+published CourseCreated by catalog.course.created
 ```
 
 В логах consumer:
@@ -102,6 +147,7 @@ processed LessonAdded
 
 ## Замечания
 
-- Для продакшена я бы использовал нормальный AMQP client и manual ack после обработки сообщения.
-- В учебном примере важнее показать exchange, routing, payload и CQRS-проекцию без тяжелых зависимостей.
+- Consumer подтверждает сообщение после записи read model.
+- Producer использует POCO HTTPServer, поэтому команды приходят через HTTP, а не захардкоженным демо-скриптом.
+- В учебном примере важнее показать exchange, routing, payload и CQRS-проекцию без лишней инфраструктуры.
 - Read model пересобирается простым consumer. В реальной LMS такие проекции жили бы в отдельной базе.

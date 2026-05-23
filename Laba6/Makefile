@@ -1,7 +1,8 @@
 CXX ?= c++
 CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -pedantic
+LIBS ?= -lPocoNet -lPocoJSON -lPocoFoundation -lrabbitmq
 
-COMMON_SRC = src/http_client.cpp src/rabbitmq_client.cpp src/events.cpp
+COMMON_SRC = src/rabbitmq_client.cpp src/events.cpp
 
 .PHONY: all clean
 
@@ -11,10 +12,10 @@ bin:
 	mkdir -p bin
 
 bin/producer: bin $(COMMON_SRC) src/producer.cpp
-	$(CXX) $(CXXFLAGS) $(COMMON_SRC) src/producer.cpp -o $@
+	$(CXX) $(CXXFLAGS) $(COMMON_SRC) src/producer.cpp $(LIBS) -o $@
 
 bin/consumer: bin $(COMMON_SRC) src/consumer.cpp
-	$(CXX) $(CXXFLAGS) $(COMMON_SRC) src/consumer.cpp -o $@
+	$(CXX) $(CXXFLAGS) $(COMMON_SRC) src/consumer.cpp $(LIBS) -o $@
 
 clean:
 	rm -rf bin

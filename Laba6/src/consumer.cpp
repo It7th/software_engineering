@@ -232,7 +232,7 @@ int main() {
   try {
     RabbitMqClient rabbit(
         envOrDefault("RABBITMQ_HOST", "127.0.0.1"),
-        envIntOrDefault("RABBITMQ_PORT", 15672),
+        envIntOrDefault("RABBITMQ_PORT", 5672),
         envOrDefault("RABBITMQ_USER", "lms"),
         envOrDefault("RABBITMQ_PASSWORD", "lms"));
 

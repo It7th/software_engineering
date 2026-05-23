@@ -187,7 +187,7 @@ binding: #
 - queue durable;
 - сообщения persistent;
 - consumer обрабатывает событие идемпотентно;
-- в production consumer подтверждает сообщение после успешной записи read model.
+- consumer подтверждает сообщение после успешной записи read model.
 
 `Exactly-once` здесь не выбираю. В распределенной системе это дорого и часто превращается в `at-least-once` плюс идемпотентность на стороне consumer. Для LMS нормальнее пережить дубль `LessonCompleted`, чем усложнять брокер и хранилища.
 
@@ -257,15 +257,19 @@ Read model можно хранить отдельно:
 
 ## 8. Что реализовано в коде
 
-В `src/producer.cpp` публикуется тестовый поток:
+В `src/producer.cpp` реализован POCO HTTP API. Он принимает команды:
 
-1. создан пользователь;
-2. создан курс;
-3. добавлены два урока;
-4. пользователь записался на курс;
-5. пользователь прошел первый урок.
+- `POST /users`;
+- `POST /courses`;
+- `POST /courses/{courseId}/lessons`;
+- `POST /courses/{courseId}/enrollments`;
+- `POST /users/{userId}/lessons/{lessonId}/completion`.
+
+После успешной команды producer публикует соответствующее событие.
 
 В `src/consumer.cpp` события читаются из очереди `lms.projections`. Consumer строит файл `data/read_model.json`.
+
+Producer и consumer подключаются к RabbitMQ по AMQP через `rabbitmq-c`. HTTP API и JSON-сообщения сделаны через `POCO`.
 
 В read model видно:
 
